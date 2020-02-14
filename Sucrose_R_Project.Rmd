@@ -1,0 +1,2143 @@
+---
+title: "sucrose"
+author: "Lin"
+date: '`r format(Sys.time(), "%B %d, %Y")`'
+output: html_document
+---
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r data}
+data <- read.csv(file="F2_Pheno_Geno.csv", na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+library("fitdistrplus", lib.loc="~/R/win-library/3.3")
+colnames(data) <- tolower(names(data))
+names(data)
+data <- data[-1,]
+x <- data$su300.s[!is.na(data$su300.s)]
+descdist(x, boot=1000)
+plot(fitdist(x, "norm"))
+shapiro.test(x)
+
+descdist(log(50-x), boot=1000)
+plot(fitdist(log(50-x), "norm"))
+shapiro.test(log(50-x))
+             
+descdist(sqrt(x), boot=1000)
+plot(fitdist(sqrt(x), "norm"))
+shapiro.test(sqrt(x))             
+
+descdist(x^3.81, boot=1000)
+plot(fitdist(x^3.81, "norm"))
+shapiro.test(x^3.81)
+
+
+y <- data$su300s_r[!is.na(data$su300s_r)]
+descdist(y, boot=1000)
+plot(fitdist(y, "norm"))
+
+library(AID)
+boxcoxnc(x, lambda = seq(-5, 5, 0.01))
+#as we can see even boxcox transformed data are not normal, so we will use the ##untrans formed data for association analyses. 
+#summary(data)
+```
+
+
+##2018-6-7; try tSNE to understand the dimensional features #label with Scq1, Scq2 or Scq3
+```{r}
+library(Rtsne)
+data <- read.csv(file="F2_Pheno_Geno.csv", na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+dat <- data[-c(1,2),]
+d2 <- dat[, c(2,4,8:118, 237,274)]
+train <- d2[,c(1:115)]
+train <- train[complete.cases(train),]
+##scq1
+D1Mit316<-train$D1Mit316
+train$D1Mit316<-as.factor(D1Mit316)
+
+## for plotting
+colors = rainbow(length(unique(train$D1Mit316)))
+names(colors) = unique(train$D1Mit316)
+
+
+## Executing the algorithm on curated data
+set.seed(180) # Sets seed for reproducibility
+tsne <- Rtsne(train[,c(66:81)], dims = 3, perplexity=50, verbose=TRUE, max_iter = 10000)
+
+
+## Plotting
+plot(tsne$Y, t='n', main="tsne_type")
+text(tsne$Y, labels=train$D1Mit316,col=colors[train$D1Mit316])
+library(scatterplot3d)
+scatterplot3d(x=tsne$Y[,1],y=tsne$Y[,2],z=tsne$Y[,3], color = colors[train$D1Mit316], main="tsne_Scq1")
+
+##Scq2
+
+rs3023231<-train$rs3023231
+train$rs3023231<-as.factor(rs3023231)
+## for plotting
+colors = rainbow(length(unique(train$rs3023231)))
+names(colors) = unique(train$rs3023231)
+
+
+## Plotting
+plot(tsne$Y, t='n', main="tsne_type")
+text(tsne$Y, labels=train$rs3023231,col=colors[train$rs3023231])
+library(scatterplot3d)
+scatterplot3d(x=tsne$Y[,1],y=tsne$Y[,2],z=tsne$Y[,3], color = colors[train$rs3023231], main="tsne_Scq2")
+
+##Scq3
+
+D14Mit126<-train$D14Mit126
+train$D14Mit126<-as.factor(D14Mit126)
+## for plotting
+colors = rainbow(length(unique(train$D14Mit126)))
+names(colors) = unique(train$D14Mit126)
+
+
+## Plotting
+plot(tsne$Y, t='n', main="tsne_type")
+text(tsne$Y, labels=train$D14Mit126,col=colors[train$D14Mit126])
+library(scatterplot3d)
+scatterplot3d(x=tsne$Y[,1],y=tsne$Y[,2],z=tsne$Y[,3], color = colors[train$D14Mit126], main="tsne_Scq3")
+
+```
+
+```{r check factors using backward}
+summary(lm(su300.s~ sex + age.suc + wat.suc + bwt4, data = data))
+
+summary(lm(su300.s~ sex + age.suc + wat.suc, data = data))
+
+summary(lm(su300.s~ age.suc + wat.suc, data = data))
+
+summary(lm(su300.s~  wat.suc, data = data))
+
+## only habitual water intake affected sucrose intake and this it was taken as covariate in the QTL mapping model.
+```
+```{r QTL mapping using R/QTL}
+
+library("qtl")
+rm(list=ls(all=TRUE))
+cross0 <- read.cross("csv", file="F2_Pheno_Geno.csv", genotypes=c("A","H","B","C","D"), na.strings="-", convertXdata=TRUE)
+cross0 <- est.rf(cross0)
+cross0 <- calc.genoprob(cross0)
+cross0 <- calc.errorlod(cross0)
+jittermap (cross0, amount=1e-6)
+
+#data imported
+```
+
+```{r SCanone}
+wat.suc <- cross0$pheno[, 35]
+
+result_su300.s<- scanone(cross0, pheno.col=78, method="em", model="normal" ,addcovar=wat.suc, n.perm=0)
+
+perm.result_su300.s<- scanone(cross0, pheno.col=78, method="em", model="normal" ,addcovar=wat.suc, n.perm=1000)
+
+threshold.suc <- apply(perm.result_su300.s, 2, quantile, c(0.37,0.95,0.99))
+threshold.suc
+
+```
+
+
+```{r plot scanone}
+plot(result_su300.s)
+abline(h=3.646302, lwd=2, lty=2, col="pink")
+abline(h=4.394577, lwd=2, lty=2, col="skyblue")
+```
+
+```{r draft Figure 1; NEED MORE WORK}
+#library(lattice)
+#library(gridBase)
+#library(grid) 
+
+plot.new()
+plot(result_su300.s)
+abline(h=3.646302, lwd=2, lty=2, col="pink")
+print(effectplot(cross0, mname1="rs3023231", geno1=c("B6/B6", "129/B6", "129/129"), pheno.col=78, draw=TRUE), vp=viewport(.8, .75, .2, .2))
+
+```
+
+```{r define confidence interval for chr9}
+suc300_chr9 <- lodint (result_su300.s, 9, drop=1.0, lodcolumn=1, expandtomarkers=FALSE)
+suc300_chr9
+
+
+```
+```{r define confidence interval for chr14}
+suc300_chr14 <- lodint (result_su300.s, 14, drop=1.0, lodcolumn=1, expandtomarkers=FALSE)
+suc300_chr14
+```
+
+```{r plot effect}
+effectplot(cross0, mname1="rs3023231", geno1=c("B6/B6", "129/B6", "129/129"), pheno.col=78, draw=TRUE)
+
+plotPXG(cross0, "D14Mit126", pheno.col=78, jitter=1, infer=TRUE)
+
+effectplot(cross0, mname2="rs3023231", geno2=c("B6/B6", "129/B6", "129/129"), mname1="D14Mit126", geno1=c("B6/B6", "129/B6", "129/129"), pheno.col=78, draw=TRUE)
+
+```
+
+```{r scantwo}
+suc300.s.2d <- scantwo(cross0, pheno.col=78, method="em", model="normal" ,addcovar=wat.suc, n.perm=0)
+summary <- summary(suc300.s.2d, thresholds=c(9.1,7.1,6.3,6.3,3.3))
+
+summary
+
+```
+
+
+```{r plot scantwo}
+plot(suc300.s.2d)
+
+effectplot(cross0, mname2="rs3023231", geno2=c("B6/B6", "129/B6", "129/129"), mname1="D1Mit316", geno1=c("B6/B6", "129/B6", "129/129"), pheno.col=78, draw=TRUE)
+
+effectplot(cross0, mname2="rs3023231", geno2=c("B6/B6", "129/B6", "129/129"), mname1="D14Mit126", geno1=c("B6/B6", "129/B6", "129/129"), pheno.col=78, draw=TRUE)
+```
+```{r do TWO_WAY_ANOVA-test in glm}
+data <- read.csv(file="F2_Pheno_Geno.csv", na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+
+data <- data[-c(1:2),]
+colnames(data) <- tolower(names(data))
+###comparing interaction
+fit <- aov(lm(su300.s~d1mit316 + rs3023231*d1mit316 + rs3023231 + d14mit126 + rs3023231*d14mit126 + wat.suc, data=data))
+
+summary(fit)
+
+library(multcompView)
+library(lsmeans)
+lsmeans = lsmeans::lsmeans  ### Uses the lsmeans function
+                            ###  from the lsmeans package,
+                            ###  not from the lmerTest package
+
+
+leastsquarea = lsmeans(fit,
+                      pairwise ~ rs3023231:d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquarea,
+    alpha=.05, 
+    Letters=letters)
+
+
+
+leastsquareb = lsmeans(fit,
+                      pairwise ~ rs3023231:d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquareb,
+    alpha=.05, 
+    Letters=letters)
+
+
+
+###comparing geno within each locus
+
+fit2 <- aov(lm(su300.s~d1mit316 + rs3023231 + d14mit126 + wat.suc, data=data))
+
+summary(fit2)
+
+leastsquare2a = lsmeans(fit2,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+
+
+leastsquare2b = lsmeans(fit2,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+
+
+leastsquare2c = lsmeans(fit2,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+
+
+cld(leastsquare2a,
+    alpha=.05, 
+    Letters=letters)
+
+cld(leastsquare2b,
+    alpha=.05, 
+    Letters=letters)
+
+cld(leastsquare2c,
+    alpha=.05, 
+    Letters=letters)
+
+
+###highly confirmed significant interactions of two pairs of loci: scon3* scon4; scon3*QTL on #chr14; the LSMs used to plot interaction effect. Tomorrow: including all in one model and #regerated data for this section.
+```
+
+### add genoeffect on 300 mM scrose into S2 Figure
+```{r}
+library(multcompView)
+library(lsmeans)
+data <-data[-c(1:2),]
+##SCON4
+###gly.s and gly.pr
+
+
+fit4a <- aov(lm(su300.s ~ d1mit316 + wat.suc, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(su300.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(su300.s~ + rs3023231  + wat.suc, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(su300.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(su300.s~ d14mit126 + wat.suc, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(su300.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+
+
+```{r S2 Figure 2:check if these loci affect other taste solution and preference}
+library(multcompView)
+library(lsmeans)
+data <-data[-c(1:2),]
+##SCON4
+###gly.s and gly.pr
+
+
+fit4a <- aov(lm(gly.s ~ d1mit316 + wat.gly, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(gly.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(gly.s~ + rs3023231  + wat.gly, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(gly.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(gly.s~ d14mit126 + wat.gly, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(gly.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+
+```{r check phe.s and phe.pr}
+
+fit4a <- aov(lm(phe.s ~ d1mit316 + wat.phe, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(phe.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(phe.s~ + rs3023231  + wat.phe, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(phe.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(phe.s~ d14mit126 + wat.phe, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(phe.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+```
+
+
+```{r check Sa1.6.s and sa1.6.pr}
+fit4a <- aov(lm(sa1.6.s ~ d1mit316 + wat.sac, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(sa1.6.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(sa1.6.s~ + rs3023231  + wat.sac, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(sa1.6.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(sa1.6.s~ d14mit126 + wat.sac, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(sa1.6.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+```
+```{r sac20}
+fit4a <- aov(lm(sa20.s ~ d1mit316 + wat.sac, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(sa20.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(sa20.s~ + rs3023231  + wat.sac, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(sa20.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(sa20.s~ d14mit126 + wat.sac, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(sa20.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+```{r Suc50}
+fit4a <- aov(lm(su50.s ~ d1mit316 + wat.suc, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(su50.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(su50.s~ + rs3023231  + wat.suc, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(su50.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(su50.s~ d14mit126 + wat.suc, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(su50.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+```{r MSG}
+fit4a <- aov(lm(msg.s ~ d1mit316 + wat.msg, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(msg.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(msg.s~ + rs3023231  + wat.msg, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(msg.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(msg.s~ d14mit126 + wat.msg, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(msg.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+```{r 3% ethanol}
+fit4a <- aov(lm(et3.s ~ d1mit316 + wat.eth, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(et3.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(et3.s~ + rs3023231  + wat.eth, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(et3.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(et3.s~ d14mit126 + wat.eth, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(et3.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+```{r 10% ethanol}
+fit4a <- aov(lm(et10.s ~ d1mit316 + wat.eth, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(et10.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(et10.s~ + rs3023231  + wat.eth, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(et10.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(et10.s~ d14mit126 + wat.eth, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(et10.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+```{r check ca}
+fit4a <- aov(lm(ca.s ~ d1mit316 + wat.av, data=data))
+summary(fit4a)
+leastsquare4a = lsmeans(fit4a,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4a,
+    alpha=.05, 
+    Letters=letters)
+
+fit4b <- aov(lm(ca.pr ~ d1mit316, data=data))
+summary(fit4b)
+leastsquare4b = lsmeans(fit4b,
+                      pairwise ~ d1mit316,
+                      adjust="tukey", data=data)
+cld(leastsquare4b,
+    alpha=.05, 
+    Letters=letters)
+
+##Scon3
+fit3a <- aov(lm(ca.s~ + rs3023231  + wat.av, data=data))
+
+summary(fit3a)
+
+leastsquare3a = lsmeans(fit3a,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3a,
+    alpha=.05, 
+    Letters=letters)
+
+fit3b <- aov(lm(ca.pr~ + rs3023231, data=data))
+
+summary(fit3b)
+
+leastsquare3b = lsmeans(fit3b,
+                      pairwise ~ rs3023231,
+                      adjust="tukey", data=data)
+cld(leastsquare3b,
+    alpha=.05, 
+    Letters=letters)
+
+
+##SCON5
+fit5a <- aov(lm(ca.s~ d14mit126 + wat.av, data=data))
+
+summary(fit5a)
+
+leastsquare5a = lsmeans(fit5a,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5a,
+    alpha=.05, 
+    Letters=letters)
+
+fit5b <- aov(lm(ca.pr~ d14mit126, data=data))
+
+summary(fit5b)
+
+leastsquare5b = lsmeans(fit5b,
+                      pairwise ~ d14mit126,
+                      adjust="tukey", data=data)
+cld(leastsquare5b,
+    alpha=.05, 
+    Letters=letters)
+
+```
+
+```{r labmaster data}
+#rlabmaste data homozygous scon4 vs 129 control
+labma <- read.csv("labma.csv", header=TRUE)
+names(labma)
+#t.test(VO2_Avg ~ Genotype, data=labma, var.equal=TRUE)
+t.test(VO2_Avg ~ Genotype, data=labma, var.equal=TRUE)
+t.test(labma$VCO2.Avg ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Heat_avg ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$RER.avg ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$XYZ_avg ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Wat_avg ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Food_avg ~ labma$Genotype, var.equal=TRUE)
+
+t.test(VO2_Avg_6 ~ Genotype, data=labma, var.equal=TRUE)
+t.test(labma$VCO2.Avg_6 ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Heat_avg_6 ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$RER.avg_6 ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$XYZ_avg_6 ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Wat_avg_6 ~ labma$Genotype, var.equal=TRUE)
+t.test(labma$Food_avg_6 ~ labma$Genotype, var.equal=TRUE)
+
+```
+
+
+```{r GTT data}
+data <- read.csv ("IGTT.csv", head=TRUE)
+dat1 <- subset(data, test=="IPGTT")
+names(dat1)
+
+make.rm<-function(constant,repeated,data,contrasts) {
+ if(!missing(constant) && is.vector(constant)) {
+  if(!missing(repeated) && is.vector(repeated)) {
+   if(!missing(data)) {
+    dd<-dim(data)
+    replen<-length(repeated)
+    if(missing(contrasts))
+     contrasts<-
+      ordered(sapply(paste("T",1:length(repeated),sep=""),rep,dd[1]))
+    else
+     contrasts<-matrix(sapply(contrasts,rep,dd[1]),ncol=dim(contrasts)[2])
+    if(length(constant) == 1) cons.col<-rep(data[,constant],replen)
+    else cons.col<-lapply(data[,constant],rep,replen)
+    new.df<-data.frame(cons.col,
+     repdat=as.vector(data.matrix(data[,repeated])),
+     contrasts)
+    return(new.df)
+   }
+  }
+ }
+ cat("Usage: make.rm(constant, repeated, data [, contrasts])\n")
+ cat("\tWhere 'constant' is a vector of indices of non-repeated data and\n")
+ cat("\t'repeated' is a vector of indices of the repeated measures data.\n")
+}
+
+myexpr.df<-make.rm(constant=c("Mouse.ID","Genotype"),repeated=c("t0","t5", "t15", "t30", "t45", "t60", "t90","t120"),data=dat1)
+summary(aov(repdat~Genotype*contrasts+Error(Mouse.ID),myexpr.df))
+
+require(nlme)
+IPGTT <- aov(repdat ~ Genotype*contrasts+Error(contrasts), myexpr.df)
+summary(IPGTT)
+IPGTT = lm(repdat~ Genotype*contrasts, data=myexpr.df, random = ~1|Mouse.ID)
+aov(IPGTT)
+
+library(asbio)
+library(sandwich)
+
+TukeyHSD(aov(IPGTT))
+
+
+require(multcomp)
+summary(glht(IPGTT, linfct=mcp(Genotype = "Tukey")))
+
+
+
+```
+
+```{r  S1 Figure plot correlations}
+library(ggplot2)
+library(grid)
+library(ggpubr)
+library(gridExtra)
+
+dat<-read.table("phenoallcrosses.csv", sep=",", header=T)
+dat<-subset(dat, type!="129.B6-Scq1_homo")
+
+#Option 1
+dm<-subset(dat, Sex=="M")
+df<-subset(dat, Sex=="F")
+
+p1 <- ggplot(dm, aes(Sucrose.intake, Body.weight)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="A. males")+labs(x="")+labs(y="BW_M") +stat_cor(method = "pearson", label.x = 20, label.y = 40, color="red") 
+p1
+
+p2 <- ggplot(dm, aes(Sucrose.intake, Water.intake)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type) + labs(title="B. males") + labs(x="") + labs(y="Wat")+stat_cor(method = "pearson", label.x = 20, label.y =7.5, color="red") 
+p2
+
+p3 <- ggplot(dm, aes(Sucrose.intake, Age)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="C. males")+labs(x="")+labs(y="Age") +stat_cor(method = "pearson", label.x = 20, label.y = 25, color="red") 
+p3
+
+p4 <- ggplot(df, aes(Sucrose.intake, Body.weight)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="D. females")+labs(x="")+labs(y="BW_F") + stat_cor(method = "pearson", label.x = 20, label.y = 30, color="red") 
+p4
+
+p5 <- ggplot(df, aes(Sucrose.intake, Water.intake)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="E. females")+labs(x="")+labs(y="Wat") + stat_cor(method = "pearson", label.x = 20, label.y = 10, color="red")
+p5
+
+p6 <- ggplot(df, aes(Sucrose.intake, Age)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="F. females")+labs(x="Daily sucrose intake, ml")+labs(y="Age")  + stat_cor(method = "pearson", label.x = 20, label.y = 25, color="red") 
+p6
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 1)
+
+##Option2, we show data in combined sex
+
+p1 <- ggplot(dat, aes(Sucrose.intake, Body.weight)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="")+labs(x="")+labs(y="BW") +stat_cor(method = "pearson", label.x = 20, label.y = 40, color="red", size=3)+labs(x="Sucrose intake, ml/d") 
+
+
+p2 <- ggplot(dat, aes(Sucrose.intake, Water.intake)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type) + labs(title="") + labs(x="") + labs(y="Wat")+stat_cor(method = "pearson", label.x = 20, label.y =10, color="red", size=3)+labs(x="Sucrose intake, ml/d") 
+
+
+p3 <- ggplot(dat, aes(Sucrose.intake, Age)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(title="")+labs(x="")+labs(y="Age") +stat_cor(method = "pearson", label.x = 20, label.y = 18, color="red", size=3)+
+  labs(x="Sucrose intake, ml/d")
+
+
+grid.arrange(p1, p2, p3, ncol = 1)
+
+###Option3
+dm<-subset(dat, Sex=="M")
+df<-subset(dat, Sex=="F")
+
+p1m <- ggplot(dm, aes(Sucrose.intake, Body.weight)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(y="BW_M") +stat_cor(method = "pearson", label.x = 20, label.y = 40, color="red", size=3)+labs(x="Sucrose intake, ml/d") 
+
+p4f <- ggplot(df, aes(Sucrose.intake, Body.weight)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(y="BW_F") + stat_cor(method = "pearson", label.x = 20, label.y = 30, color="red", size=3)+labs(x="Sucrose intake, ml/d")  
+
+
+p2 <- ggplot(dat, aes(Sucrose.intake, Water.intake)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type) + labs(y="Wat")+stat_cor(method = "pearson", label.x = 20, label.y =10, color="red", size=3)+labs(x="Sucrose intake, ml/d") 
+
+
+p3 <- ggplot(dat, aes(Sucrose.intake, Age)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(. ~ type)+labs(y="Age") +stat_cor(method = "pearson", label.x = 20, label.y = 18, color="red", size=3)+
+  labs(x="Sucrose intake, ml/d")
+
+
+grid.arrange(p1m, p4f, p2, p3, ncol = 1)
+```
+
+```{r S2 Figire correlation taste solution intakes}
+data <- read.csv(file="F2_Pheno_Geno.csv", na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+
+dat<-data[-(1:2),c(41, 49,57, 64, 72, 79, 91, 99,106,113, 38)]
+colnames(dat)<-c("30 mM glycine", "30 mM D-phenylalanine", "1.6 mM saccharin", "20 mM saccharin", "50 mM sucrose", "300 mM sucrose", "300 mM MSG", "3% ethanol", "10% ethanol", "150 mM CaCl2", "Water only")
+cormat <- round(cor(dat, use = "complete.obs"),2)
+head(cormat)
+library(reshape2)
+melted_cormat <- melt(cormat)
+melted_cormat$test<- rep("Intake",nrow(melted_cormat))
+head(melted_cormat)
+
+dat2<-data[-(1:2),c(46, 54,62, 69, 77, 84, 96, 104,111,115,31)]
+colnames(dat2)<-c("30 mM glycine", "30 mM D-phenylalanine", "1.6 mM saccharin", "20 mM saccharin", "50 mM sucrose", "300 mM sucrose", "300 mM MSG", "3% ethanol", "10% ethanol", "150 mM CaCl2", "Water only")
+cormat2 <- round(cor(dat2, use = "complete.obs"),2)
+head(cormat2)
+melted_cormat2 <- melt(cormat2)
+melted_cormat2$test<- rep("Preference",nrow(melted_cormat2))
+head(melted_cormat2)
+melted_cormat3 <-rbind(melted_cormat, melted_cormat2)
+
+library(ggplot2)
+p<-ggplot(data = melted_cormat3, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile()+geom_tile(color = "white")+
+ scale_fill_gradient2(low = "white", high = "blue", mid = "grey", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size=10, hjust = 1))+
+ coord_fixed() +xlab("")+ylab("")+ facet_wrap(~test, nrow = 1)
+p
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+# check MR data for scon4 at 2 months old
+```{r}
+library(multcompView)
+library(lsmeans)
+dat <- read.csv("MRDEXADISSECT.csv")
+
+# Mouse at 2 months
+dat2<-dat[dat$test %in% "test1",]
+
+#fat
+fit1 <- aov(lm(Fat..g. ~ Genotype + Sex, data=dat2))
+summary(fit1)
+leastsquare1 = lsmeans(fit1,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare1,
+    alpha=.05, 
+    Letters=letters)
+
+#lean
+fit2 <- aov(lm(Lean..g. ~ Genotype + Sex, data=dat2))
+summary(fit2)
+leastsquare2 = lsmeans(fit2,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare2,
+    alpha=.05, 
+    Letters=letters)
+ # Fluid
+fit3 <- aov(lm(Fluid..g. ~ Genotype + Sex, data=dat2))
+summary(fit3)
+leastsquare3 = lsmeans(fit3,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare3,
+    alpha=.05, 
+    Letters=letters)
+#body weight
+
+fit4 <- aov(lm(Weight..g. ~ Genotype + Sex, data=dat2))
+summary(fit4)
+leastsquare4 = lsmeans(fit4,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare4,
+    alpha=.05, 
+    Letters=letters)
+
+#%Fat
+fit5 <- aov(lm(X..Fat ~ Genotype + Sex, data=dat2))
+summary(fit5)
+leastsquare5 = lsmeans(fit5,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare5,
+    alpha=.05, 
+    Letters=letters)
+
+##%Lean
+
+fit6 <- aov(lm(X..Lean ~ Genotype + Sex, data=dat2))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+ #%Fluid
+fit7 <- aov(lm(X..Fluid ~ Genotype + Sex, data=dat2))
+summary(fit7)
+leastsquare7 = lsmeans(fit7,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare7,
+    alpha=.05, 
+    Letters=letters)
+
+
+```
+
+# check MR data for scon4 at 36 weeks old
+```{r}
+library(multcompView)
+library(lsmeans)
+dat <- read.csv("MRDEXADISSECT.csv")
+
+# Mouse at 2 months
+dat2<-dat[dat$test %in% "test2",]
+
+#fat
+fit1 <- aov(lm(Fat..g. ~ Genotype + Sex, data=dat2))
+summary(fit1)
+leastsquare1 = lsmeans(fit1,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare1,
+    alpha=.05, 
+    Letters=letters)
+
+#lean
+fit2 <- aov(lm(Lean..g. ~ Genotype + Sex, data=dat2))
+summary(fit2)
+leastsquare2 = lsmeans(fit2,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare2,
+    alpha=.05, 
+    Letters=letters)
+ # Fluid
+fit3 <- aov(lm(Fluid..g. ~ Genotype + Sex, data=dat2))
+summary(fit3)
+leastsquare3 = lsmeans(fit3,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare3,
+    alpha=.05, 
+    Letters=letters)
+#body weight
+
+fit4 <- aov(lm(Weight..g. ~ Genotype + Sex, data=dat2))
+summary(fit4)
+leastsquare4 = lsmeans(fit4,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare4,
+    alpha=.05, 
+    Letters=letters)
+
+#%Fat
+fit5 <- aov(lm(X..Fat ~ Genotype + Sex, data=dat2))
+summary(fit5)
+leastsquare5 = lsmeans(fit5,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare5,
+    alpha=.05, 
+    Letters=letters)
+
+##%Lean
+
+fit6 <- aov(lm(X..Lean ~ Genotype + Sex, data=dat2))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+ #%Fluid
+fit7 <- aov(lm(X..Fluid ~ Genotype + Sex, data=dat2))
+summary(fit7)
+leastsquare7 = lsmeans(fit7,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat2)
+cld(leastsquare7,
+    alpha=.05, 
+    Letters=letters)
+```
+
+#Dissection at 36 weeks old
+```{r}
+library(multcompView)
+library(lsmeans)
+dat <- read.csv("MRDEXADISSECT.csv")
+
+#Body.Weight
+fit1 <- aov(lm(Body.Weight ~ Genotype + Sex, data=dat))
+summary(fit1)
+leastsquare1 = lsmeans(fit1,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare1,
+    alpha=.05, 
+    Letters=letters)
+
+#Body.Length 
+fit2 <- aov(lm(Body.Length ~ Genotype + Sex, data=dat))
+summary(fit2)
+leastsquare2 = lsmeans(fit2,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare2,
+    alpha=.05, 
+    Letters=letters)
+
+#Gonadal
+fit3 <- aov(lm(Gonadal ~ Genotype + Sex, data=dat))
+summary(fit3)
+leastsquare3 = lsmeans(fit3,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare3,
+    alpha=.05, 
+    Letters=letters)
+
+#Retroperitoneal
+fit4 <- aov(lm(Retroperitoneal ~ Genotype + Sex, data=dat))
+summary(fit4)
+leastsquare4 = lsmeans(fit4,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare4,
+    alpha=.05, 
+    Letters=letters)
+
+#Kidney
+fit5 <- aov(lm(Kidney ~ Genotype + Sex, data=dat))
+summary(fit5)
+leastsquare5 = lsmeans(fit5,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare5,
+    alpha=.05, 
+    Letters=letters)
+
+#Pancreas
+fit6 <- aov(lm(Pancreas ~ Genotype + Sex, data=dat))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+#Mesenteric
+fit6 <- aov(lm(Mesenteric~ Genotype + Sex, data=dat))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+#Spleen
+fit7 <- aov(lm(Spleen~ Genotype + Sex, data=dat))
+summary(fit7)
+leastsquare7 = lsmeans(fit7,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare7,
+    alpha=.05, 
+    Letters=letters)
+
+#Liver
+fit8 <- aov(lm(Liver~ Genotype + Sex, data=dat))
+summary(fit8)
+leastsquare8 = lsmeans(fit8,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare8,
+    alpha=.05, 
+    Letters=letters)
+
+#Heart
+fit9 <- aov(lm(Heart~ Genotype + Sex, data=dat))
+summary(fit9)
+leastsquare9 = lsmeans(fit9,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare9,
+    alpha=.05, 
+    Letters=letters, adjust="None")
+
+#Inguinal
+fit10 <- aov(lm(Inguinal~ Genotype + Sex, data=dat))
+summary(fit10)
+leastsquare10 = lsmeans(fit10,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare10,
+    alpha=.05, 
+    Letters=letters, adjust="None")
+
+#Subscapular
+fit11 <- aov(lm(Subscapular~ Genotype + Sex, data=dat))
+summary(fit11)
+leastsquare11 = lsmeans(fit11,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare11,
+    alpha=.05, 
+    Letters=letters, adjust="None")
+
+#Brown.Fat
+fit12 <- aov(lm(Brown.Fat~ Genotype + Sex, data=dat))
+summary(fit12)
+leastsquare12 = lsmeans(fit12,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare12,
+    alpha=.05, 
+    Letters=letters)
+
+
+#Brain
+fit13 <- aov(lm(Brain~ Genotype + Sex, data=dat))
+summary(fit13)
+leastsquare13 = lsmeans(fit13,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare13,
+    alpha=.05, 
+    Letters=letters, adjust="None")
+```
+
+
+## Check DEXA data at 36 weeks old
+```{r}
+library(multcompView)
+library(lsmeans)
+dat <- read.csv("MRDEXADISSECT.csv")
+
+#BMD
+fit1 <- aov(lm(BMD ~ Genotype + Sex, data=dat))
+summary(fit1)
+leastsquare1 = lsmeans(fit1,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare1,
+    alpha=.05, 
+    Letters=letters)
+
+#BMC 
+fit2 <- aov(lm(BMC ~ Genotype + Sex, data=dat))
+summary(fit2)
+leastsquare2 = lsmeans(fit2,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare2,
+    alpha=.05, 
+    Letters=letters)
+
+#Area
+fit3 <- aov(lm(Area ~ Genotype + Sex, data=dat))
+summary(fit3)
+leastsquare3 = lsmeans(fit3,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare3,
+    alpha=.05, 
+    Letters=letters)
+
+#BMD.1
+fit4 <- aov(lm(BMD.1 ~ Genotype + Sex, data=dat))
+summary(fit4)
+leastsquare4 = lsmeans(fit4,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare4,
+    alpha=.05, 
+    Letters=letters)
+
+#BMC.1
+fit5 <- aov(lm(BMC.1 ~ Genotype + Sex, data=dat))
+summary(fit5)
+leastsquare5 = lsmeans(fit5,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare5,
+    alpha=.05, 
+    Letters=letters)
+
+#Area.1
+fit6 <- aov(lm(Area.1 ~ Genotype + Sex, data=dat))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+#Lean
+fit6 <- aov(lm(Lean~ Genotype + Sex, data=dat))
+summary(fit6)
+leastsquare6 = lsmeans(fit6,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare6,
+    alpha=.05, 
+    Letters=letters)
+
+#Fat
+fit7 <- aov(lm(Fat~ Genotype + Sex, data=dat))
+summary(fit7)
+leastsquare7 = lsmeans(fit7,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare7,
+    alpha=.05, 
+    Letters=letters)
+
+#Total
+fit8 <- aov(lm(Total~ Genotype + Sex, data=dat))
+summary(fit8)
+leastsquare8 = lsmeans(fit8,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare8,
+    alpha=.05, 
+    Letters=letters)
+
+#%.Fat
+fit9 <- aov(lm(X.Fat~ Genotype + Sex, data=dat))
+summary(fit9)
+leastsquare9 = lsmeans(fit9,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare9,
+    alpha=.05, 
+    Letters=letters)
+
+#Lean.1
+fit10 <- aov(lm(Lean.1~ Genotype + Sex, data=dat))
+summary(fit10)
+leastsquare10 = lsmeans(fit10,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare10,
+    alpha=.05, 
+    Letters=letters)
+
+#Fat.1
+fit11 <- aov(lm(Fat.1~ Genotype + Sex, data=dat))
+summary(fit11)
+leastsquare11 = lsmeans(fit11,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare11,
+    alpha=.05, 
+    Letters=letters)
+
+#Total.1
+fit12 <- aov(lm(Total.1~ Genotype + Sex, data=dat))
+summary(fit12)
+leastsquare12 = lsmeans(fit12,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare12,
+    alpha=.05, 
+    Letters=letters)
+
+#%.Fat.1
+fit13 <- aov(lm(X.Fat.1~ Genotype + Sex, data=dat))
+summary(fit13)
+leastsquare13 = lsmeans(fit13,
+                      pairwise ~ Genotype + Sex,
+                      adjust="tukey", data=dat)
+cld(leastsquare13,
+    alpha=.05, 
+    Letters=letters)
+
+```
+
+###now I try to explore allometry in three data sets for sex separately because it's clear sex difference.
+##MR data
+```{r}
+pacman::p_load(dplyr, broom, stringr, knitr, gee, nlme, texreg, reshape2, ggplot2, ggpubr, psych, Hmisc)
+
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  =(cormat)[ut],
+    p = pmat[ut]
+    )
+}
+
+dat <- read.csv("MRDEXADISSECT.csv")
+
+############################
+### Mouse at 2 months 
+############################
+
+
+dat1<-dat[dat$test %in% "test1",]
+
+#Males
+dat1<-dat1[dat1$Sex %in% "M",]
+
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.", "X..Fat", "X..Lean", "X..Fluid")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight", "Fat%", "Lean%", "Fluid%")
+
+##Geno "A"
+MRA <- MR[MR$Genotype %in% "A",]
+res<-rcorr(as.matrix(MRA[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res$r, res$P)
+
+##Geno "B"
+MRB <- MR[MR$Genotype %in% "B",]
+res2<-rcorr(as.matrix(MRB[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res2$r, res2$P)
+
+
+
+#fat
+r.test(n=8, r12=0.6313188, r34= 0.711376966, n2=7)
+#lean
+r.test(n=8, r12=0.9493476, r34= 0.973314610, n2=7)
+#fluid
+r.test(n=8, r12=0.1315838, r34=0.895011043, n2=7)
+
+#fat%
+r.test(n=8, r12=0.4611449, r34= 0.160811851, n2=7)
+#lean%
+r.test(n=8, r12=0.5368940, r34=-0.043116410, n2=7)
+#fluid%
+r.test(n=8, r12=-0.8520036, r34=-0.043234171, n2=7)
+
+
+
+
+
+##Females
+
+dat1<-dat[dat$test %in% "test1",]
+dat1<-dat1[dat1$Sex %in% "F",]
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.", "X..Fat", "X..Lean", "X..Fluid")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight", "Fat%", "Lean%", "Fluid%")
+
+##Geno "A"
+MRA <- MR[MR$Genotype %in% "A",]
+res3<-rcorr(as.matrix(MRA[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res3$r, res3$P)
+
+##Geno "B"
+MRB <- MR[MR$Genotype %in% "B",]
+res4<-rcorr(as.matrix(MRB[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res4$r, res4$P)
+
+
+
+#fat
+r.test(n=12, r12=0.66795467, r34= -0.2689291, n2=5)
+#lean
+r.test(n=12, r12=0.96806230, r34= 0.9649215, n2=5)
+#fluid
+r.test(n=12, r12=0.72986564, r34=0.9444136, n2=5)
+
+#fat%
+r.test(n=12, r12=-0.38568765, r34= -0.5459393, n2=5)
+#lean%
+r.test(n=12, r12=-0.14863536 , r34=0.7787953, n2=5)
+#fluid%
+r.test(n=12, r12=-0.18539186, r34=0.8648241, n2=5)
+
+
+###combind males and females
+
+dat <- read.csv("MRDEXADISSECT.csv")
+dat1<-dat[dat$test %in% "test1",]
+
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.", "X..Fat", "X..Lean", "X..Fluid")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight", "Fat%", "Lean%", "Fluid%")
+
+##Geno "A"
+MRA <- MR[MR$Genotype %in% "A",]
+res<-rcorr(as.matrix(MRA[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res$r, res$P)
+
+##Geno "B"
+MRB <- MR[MR$Genotype %in% "B",]
+res2<-rcorr(as.matrix(MRB[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res2$r, res2$P)
+
+
+
+#fat ###INTERESTING ONSERVATION
+r.test(n=32, r12=-0.12857968, r34= 0.4054804, n2=20)
+#lean
+r.test(n=32, r12=0.97504118, r34=  0.9622811, n2=20)
+#fluid
+r.test(n=32, r12=0.82517118, r34= 0.8868051, n2=20)
+
+#fat% ###INTERESTING ONSERVATION
+r.test(n=32, r12=-0.63666907, r34= -0.1204367, n2=20)
+#lean%
+r.test(n=32, r12=0.46747387, r34=-0.8874443, n2=20)
+#fluid%
+r.test(n=32, r12=-0.04485946, r34=0.2326042, n2=20)
+
+##S5 ##2 month MR
+dat <- read.csv("MRDEXADISSECT.csv")
+dat1<-dat[dat$test %in% "test1",]
+
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight")
+
+
+MRmelt <- melt(MR, id.vars = c("Mouse.ID", "Genotype", "Bodyweight"), value.name = "compositions")
+
+g <- ggplot(MRmelt, aes(x=Bodyweight, y=compositions, color=Genotype)) +facet_grid(. ~ variable)+geom_point(alpha = 0.1) + geom_smooth(method=lm, aes(fill=Genotype)) 
+g1 <- g + scale_y_continuous(trans="log10") 
+g2 <- g1+xlab("Body weight, g")+ylab("Composition, g")
+ga <- g2+theme(legend.position="none")+scale_x_continuous(breaks=c(14, 18))+ggtitle("A")
+
+##########################################
+####6 months old
+##########################################
+##combined males and females because sample size must have >4 observations
+
+dat <- read.csv("MRDEXADISSECT.csv")
+dat1<-dat[dat$test %in% "test2",]
+
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.", "X..Fat", "X..Lean", "X..Fluid")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight", "Fat%", "Lean%", "Fluid%")
+
+##Geno "A"
+MRA <- MR[MR$Genotype %in% "A",]
+res<-rcorr(as.matrix(MRA[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res$r, res$P)
+
+##Geno "B"
+MRB <- MR[MR$Genotype %in% "B",]
+res2<-rcorr(as.matrix(MRB[,3:9]), type = "pearson")
+
+flattenCorrMatrix(res2$r, res2$P)
+
+
+
+#fat
+r.test(n=15, r12=0.20036484, r34= -0.4018892, n2=7)
+#lean
+r.test(n=15, r12= 0.94479991, r34=  0.9492552, n2=7)
+#fluid
+r.test(n=15, r12=0.92838108, r34= 0.8917288, n2=7)
+
+#fat%
+r.test(n=15, r12=0.01720496, r34= -0.5445801, n2=7)
+#lean%
+r.test(n=15, r12=0.01720496, r34=0.1635618, n2=7)
+#fluid%
+r.test(n=15, r12=0.01436365, r34=0.5788418, n2=7)
+
+
+###S7 Figure ##6 month MR
+
+dat <- read.csv("MRDEXADISSECT.csv")
+dat1<-dat[dat$test %in% "test2",]
+
+
+mrcols <- c("Mouse.ID", "Genotype", "Fat..g.", "Lean..g.", "Fluid..g.", "Weight..g.")
+MR <- dat1[, mrcols]
+colnames(MR) <-c("Mouse.ID", "Genotype", "Fat", "Lean", "Fluid", "Bodyweight")
+
+
+MRmelt <- melt(MR, id.vars = c("Mouse.ID", "Genotype", "Bodyweight"), value.name = "compositions")
+
+g <- ggplot(MRmelt, aes(x=Bodyweight, y=compositions, color=Genotype)) +facet_grid(. ~ variable)+geom_point(alpha = 0.1) + geom_smooth(method=lm, aes(fill=Genotype)) 
+g1 <- g + scale_y_continuous(trans="log10") 
+g2 <- g1+xlab("Body weight, g")+ylab("Composition, g")
+gb <- g2+theme(legend.position="none")+scale_x_continuous(breaks=c(17, 21))+ggtitle("B")
+
+```
+
+###Look at the DEXA data and combined males and females because ##must have >4 observations for correlations
+```{r}
+
+dat <- read.csv("MRDEXADISSECT.csv")
+
+DEXcols <- c("Mouse.ID", "Genotype", "BMD", "BMC", "BMD.1", "BMC.1", "Lean", "Fat", "Total", "X.Fat", "Lean.1", "Fat.1", "Total.1", "X.Fat.1")
+DEX <- dat[, DEXcols]
+DEX1<- DEX[complete.cases(DEX), ]
+
+
+##Geno "A"
+DEXA1 <- DEX1[DEX1$Genotype %in% "A",]
+res<-rcorr(as.matrix(DEXA1[,3:14]), type = "pearson")
+
+flattenCorrMatrix(res$r, res$P)
+
+##Geno "B"
+DEXB1 <- DEX1[DEX1$Genotype %in% "B",]
+res2<-rcorr(as.matrix(DEXB1[,3:14]), type = "pearson")
+
+flattenCorrMatrix(res2$r, res2$P)
+
+
+
+#BMD
+r.test(n=19, r12=0.3500977, r34= 0.3939976, n2=7)
+#BMC
+r.test(n=19, r12=0.4461479, r34= 0.5388855, n2=7)
+#fat
+r.test(n=19, r12=0.6435274, r34=  0.5064035, n2=7)
+#lean
+r.test(n=15, r12= 0.9817480, r34=  0.9797263, n2=7)
+#fat%
+r.test(n=19, r12=-0.3923707, r34=  -0.4052998, n2=7)
+
+
+#BMD.1
+r.test(n=19, r12=0.3500977, r34= 0.3939976, n2=7)
+#BMC.1
+r.test(n=19, r12=0.4461479, r34= 0.5388855, n2=7)
+#fat.1
+r.test(n=19, r12=0.6435274, r34=  0.5064035, n2=7)
+#lean.1
+r.test(n=15, r12= 0.9817480, r34= 0.9797263, n2=7)
+#fat%.1
+r.test(n=19, r12=-0.3923707, r34= -0.4052998, n2=7)
+
+##S8 ##6 month DEXA
+dat <- read.csv("MRDEXADISSECT.csv")
+
+DEXcols <- c("Mouse.ID", "Genotype", "BMD", "BMC", "Lean", "Fat", "Total")
+DEX <- dat[, DEXcols]
+DEX1<- DEX[complete.cases(DEX), ]
+
+
+melt <- melt(DEX1, id.vars = c("Mouse.ID", "Genotype", "Total"), value.name = "compositions")
+
+g <- ggplot(melt, aes(x=Total, y=compositions, color=Genotype)) +facet_grid(. ~ variable)+geom_point(alpha = 0.1) + geom_smooth(method=lm, aes(fill=Genotype)) 
+g1 <- g + scale_y_continuous(trans="log10") 
+g2 <- g1+xlab("Body weight, g")+ylab("Composition, g")
+gc <-g2+ scale_x_continuous(breaks=c(17.5, 22.5))+ggtitle("C")
+
+```
+
+
+###Look at the DISSECT data and combined males and females because ##must have >4 observations for correlations
+
+```{r}
+dat <- read.csv("MRDEXADISSECT.csv")
+
+DIScols <- c("Mouse.ID", "Genotype", "Body.Weight", "Body.Length", "Gonadal", "Retroperitoneal", "Kidney", "Pancreas", "Mesenteric", "Spleen", "Liver", "Pericardial", "Heart", "Inguinal", "Subscapular", "Brown.Fat", "Brain")
+DISS <- dat[, DIScols]
+DISS1<- DISS[complete.cases(DISS), ]
+
+
+##Geno "A"
+DISS1A <- DISS1[DISS1$Genotype %in% "A",]
+res<-rcorr(as.matrix(DISS1A[,3:17]), type = "pearson")
+
+flattenCorrMatrix(res$r, res$P)
+
+##Geno "B"
+DISS1B <- DISS1[DISS1$Genotype %in% "B",]
+res2<-rcorr(as.matrix(DISS1B[,3:17]), type = "pearson")
+
+flattenCorrMatrix(res2$r, res2$P)
+
+
+
+#Body.Length
+r.test(n=19, r12= 0.908621905, r34= 0.727187783, n2=7)
+
+#Gonadal
+r.test(n=19, r12= 0.082264820, r34= 0.204638243, n2=7)
+
+
+#Retroperitoneal
+r.test(n=19, r12=0.476684671, r34= 0.382425285, n2=7)
+
+#Kidney
+r.test(n=19, r12=0.905686549, r34= 0.790728815, n2=7)
+
+#Pancreas
+r.test(n=15, r12= 0.361222587, r34= 0.862340954, n2=7)
+
+#Mesenteric
+r.test(n=19, r12=0.712066015, r34=  0.104743554 , n2=7)
+
+#Spleen
+r.test(n=19, r12=0.144317084, r34=  0.377922992, n2=7)
+
+#Liver
+r.test(n=19, r12=0.916472438, r34= 0.321440341, n2=7)
+
+
+#Heart
+r.test(n=15, r12= 0.774359908, r34= 0.428229194, n2=7)
+
+#Inguinal
+r.test(n=19, r12= 0.598944313, r34= 0.099439800, n2=7)
+
+#Subscapular
+r.test(n=19, r12=-0.069683861, r34= -0.108683347, n2=7)
+
+#Brown.Fat
+r.test(n=19, r12= 0.719051907, r34= 0.101646287, n2=7)
+
+#Brain
+r.test(n=19, r12= -0.009706221, r34= 0.555622656, n2=7)
+
+#####################################
+##check allometry inj body length
+#####################################
+
+#Gonadal
+r.test(n=19, r12= -0.152175547, r34= -0.123039709, n2=7)
+
+
+#Retroperitoneal
+r.test(n=19, r12=0.251718537, r34= 0.119297643, n2=7)
+
+#Kidney
+r.test(n=19, r12=0.846222998, r34= 0.769739873, n2=7)
+
+#Pancreas
+r.test(n=15, r12= 0.359602764, r34= 0.440989802, n2=7)
+
+#Mesenteric
+r.test(n=19, r12=0.652105286, r34=   0.240750407 , n2=7)
+
+#Spleen
+r.test(n=19, r12=0.082593883, r34=  0.145981127, n2=7)
+
+#Liver
+r.test(n=19, r12=0.848927306, r34=  0.185205985, n2=7)
+
+
+#Heart
+r.test(n=15, r12= 0.628447093, r34= 0.539963128, n2=7)
+
+#Inguinal
+r.test(n=19, r12= 0.429476058, r34= 0.370245405, n2=7)
+
+#Subscapular
+r.test(n=19, r12=-0.272384631, r34=  0.000000000, n2=7)
+
+#Brown.Fat
+r.test(n=19, r12= 0.595681113, r34=  0.182994231, n2=7)
+
+#Brain
+r.test(n=19, r12=  -0.086922127, r34=  0.424464170, n2=7)
+
+## Figure 13 to plot
+dat <- read.csv("MRDEXADISSECT.csv")
+
+DIScols <- c("Mouse.ID", "Genotype", "Body.Weight", "Gonadal", "Retroperitoneal",  "Mesenteric",   "Inguinal", "Subscapular", "Brown.Fat")
+DISS <- dat[, DIScols]
+DISS1<- DISS[complete.cases(DISS), ]
+
+melt <- melt(DISS1, id.vars = c("Mouse.ID", "Genotype", "Body.Weight"), value.name = "compositions")
+
+g <- ggplot(melt, aes(x=Body.Weight, y=compositions,color=Genotype)) +facet_grid(. ~ variable)+geom_point(alpha = 0.1) + geom_smooth(method=lm, aes(fill=Genotype))
+
+
+g1 <- g + scale_y_continuous(trans="log10") 
+g2 <- g1+xlab("Body weight, g")+ylab("Fat weight, g")
+
+##Supletmental Figur #5
+DIScols <- c("Mouse.ID", "Genotype", "Body.Weight",  "Kidney", "Pancreas",  "Spleen", "Liver",  "Heart",  "Brain")
+DISS <- dat[, DIScols]
+DISS1<- DISS[complete.cases(DISS), ]
+
+melt <- melt(DISS1, id.vars = c("Mouse.ID", "Genotype", "Body.Weight"), value.name = "compositions")
+
+g <- ggplot(melt, aes(x=Body.Weight, y=compositions,color=Genotype)) +facet_grid(. ~ variable)+geom_point(alpha = 0.1) + geom_smooth(method=lm, aes(fill=Genotype))
+
+
+g1 <- g + scale_y_continuous(trans="log10") 
+g2 <- g1+xlab("Body weight, g")+ylab("Organ weight, g")
+gd <- g2+theme(legend.position="none") + scale_x_continuous(breaks=c(17.5, 22.5))+ggtitle("D")
+
+##Supplemental Figure 5
+library(gridExtra)
+grid.arrange(ga, gc, gb, gd, ncol=2, nrow = 2, widths = 1:2, name="arrange")
+
+```
+
+# S5 Table correlation between intakes and preferences in F2
+```{r}
+library("Hmisc")
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  =(cormat)[ut],
+    p = pmat[ut]
+    )
+}
+
+data <- read.csv(file="F2_Pheno_Geno.csv", na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+dat1<-data[-c(1:2),c(1,40,46,48,54,56,62,63,69,71,77,78, 84, 90, 96, 98, 104,105,111,113,115, 38, 31 )]
+
+library(reshape2)
+datint <-dat1[,c(1,2,4,6,8,10,12, 14, 16, 18,20, 22)]
+datpref<-dat1[,c(1,3,5,7,9,11,13, 15, 17, 19,21, 23)]
+colnames(datint) <- c("mouseid","30 mM glycine","30 mM D-phenylalanine","1.6 mM saccharin", "20 mM saccharin" , "50 mM sucrose",  "300 mM sucrose", "300 mM MSG",   "3% ethanol",  "10% ethanol",  "150 mM CaCl2",   "Water only" )
+meltint<-melt(datint, id="mouseid", variable="solution", value="int")
+
+colnames(datpref) <- c("mouseid","30 mM glycine","30 mM D-phenylalanine","1.6 mM saccharin", "20 mM saccharin" , "50 mM sucrose",  "300 mM sucrose", "300 mM MSG",   "3% ethanol",  "10% ethanol",  "150 mM CaCl2",   "Water only" )
+meltpref<-melt(datpref, id="mouseid", variable="solution", value="pref")
+
+newdf<-merge(meltint, meltpref, by=c("mouseid","solution" ))
+library(ggplot2)
+library(ggpubr)
+g<-ggplot(newdf, aes(value.x, value.y)) + geom_point(shape=1) +geom_smooth(method="lm") + facet_grid(.~solution)+labs(x="Intake, ml")+labs(y="Preference, %") +stat_cor(method = "pearson", label.x = 20, label.y = 120, color="red", size=3)
+g
+
+
+library(sjPlot)
+sjt.corr(dat1[2:23], corr.method = "pearson", na.deletion = "pairwise", file="Intvspref_corr_F2.doc")
+
+
+```
+
+##s3 Figure,version2, combined heatmap annd intvspref
+```{r}
+library("cowplot")
+
+
+S3_Fig <- plot_grid(p, g, 
+          labels = c("A", "B"),
+          ncol = 1, nrow = 2)
+```
+
+##t_sne_check
+```{r}
+library(Rtsne)
+dat<- read.csv("F2_Pheno_Geno.csv",  na = c("-"), header=TRUE, sep=",", stringsAsFactors=FALSE)
+
+dat <- dat[-c(1:2),]
+colnames(dat) <- tolower(names(dat))
+
+gl <- dat[, c(40,46)]
+gl["conc"] <- "gly30"
+colnames(gl) <-c("int", "pre", "conc")
+
+ph <- dat[, c(48,54)]
+ph["conc"] <- "phe30"
+colnames(ph) <-c("int", "pre", "conc")
+
+sa20 <- dat[, c(63,69)]
+sa20["conc"] <- "sa20"
+colnames(sa20) <-c("int", "pre", "conc")
+
+sa1 <- dat[, c(56,62)]
+sa1["conc"] <- "sa1.6"
+colnames(sa1) <-c("int", "pre", "conc")
+
+wat <- data.frame(dat[, 38])
+wat["pre"]<-50
+wat["conc"]<-"wat"
+colnames(wat) <-c("int", "pre", "conc")
+
+other<-rbind(wat,rbind(sa1,rbind(sa20, rbind(ph, gl))))
+
+
+msg <- dat[, c(90,96)]
+msg["conc"] <- "MSG300"
+colnames(msg) <-c("int", "pre", "conc")
+
+et3 <- dat[, c(98,104)]
+et3["conc"] <- "eth3"
+colnames(et3) <-c("int", "pre", "conc")
+
+et10 <- dat[, c(105,111)]
+et10["conc"] <- "eth10"
+colnames(et10) <-c("int", "pre", "conc")
+
+
+cas <- dat[, c(113,115)]
+cas["conc"] <- "CaCl2"
+colnames(cas) <-c("int", "pre", "conc")
+
+su50 <- dat[, c(71,77)]
+su50["conc"] <- "suc50"
+colnames(su50) <-c("int", "pre", "conc")
+
+su300 <- dat[, c(78, 84)]
+su300["conc"] <- "suc300"
+colnames(su300) <-c("int", "pre", "conc")
+
+d_suc<-rbind(other,rbind(et3,rbind(et10, rbind(cas, rbind(msg,rbind(su50, su300))))))
+d_suc1<-d_suc[complete.cases(d_suc),]
+d_suc1_uniq <- unique(d_suc1)
+su_matrix <- as.matrix(d_suc1_uniq[, 1:2])
+set.seed(42)
+tsne_su <- Rtsne(su_matrix, check_duplicates = FALSE)
+plot(tsne_su$Y, col=d_suc1_uniq$conc) 
+
+library(ggplot2)
+tsne_plot <- data.frame(x = tsne_su$Y[,1], y = tsne_su$Y[,2], col = d_suc1_uniq$conc)
+ggplot(tsne_plot) + geom_point(aes(x=x, y=y, color=col))+xlab("tsne_x")+ylab("tsne_y")
+
+```
+
