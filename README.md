@@ -1,4 +1,4 @@
-# SucrosIntake_Analyses
+# GeneticAnalyses_SucrosIntake
 Analysis provided in the "Genetics of mouse Tas1r3-independent sucrose intake" manuscript
 
 This repository is meant to provide the source code for the analysis provided in the above manuscript by Cailu Lin, Alexander A. Bachmanov, Michael G. Tordoff, Xia Li, Natalia P. Bosak, Yutaka Ishiwatari, Longhui Chen, Masashi Inoue, Gary K. Beauchamp and Danielle R. Reed
